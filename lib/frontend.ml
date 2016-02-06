@@ -1,4 +1,4 @@
-(*
+(i*
  * Copyright (c) 2010-2013 Anil Madhavapeddy <anil@recoil.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -18,6 +18,10 @@ open Lwt.Infix
 open Printf
 open OS
 open Result
+
+let src = Logs.Src.create "mirage-net-xen.frontend" ~doc:"Xen Netfront ethernet
+device driver frontend"
+module Log = (val Logs.src_log src : Logs.LOG)
 
 let return = Lwt.return
 
@@ -103,12 +107,12 @@ module Make(C: S.CONFIGURATION with type 'a io = 'a Lwt.t) = struct
     (* Read details about the device *)
     C.read_backend id >>= fun backend_conf ->
     let backend_id = backend_conf.S.backend_id in
-    Printf.printf "Netfront.create: id=%d domid=%d\n%!" vif_id backend_id;
+    Log.debug (fun f -> f "Netfront.create: id=%d domid=%d" vif_id backend_id);
     let features = backend_conf.S.features_available in
     Features.(Printf.printf " sg:%b gso_tcpv4:%b rx_copy:%b rx_flip:%b smart_poll:%b\n"
       features.sg features.gso_tcpv4 features.rx_copy features.rx_flip features.smart_poll);
     C.read_mac id >>= fun mac ->
-    printf "MAC: %s\n%!" (Macaddr.to_string mac);
+    Log.debug (fun f -> f "MAC: %s" (Macaddr.to_string mac));
     (* Allocate a transmit and receive ring, and event channel *)
     lwt (rx_gnt, rx_fring, rx_client) = create_rx (vif_id, backend_id) in
     lwt (tx_gnt, _tx_fring, tx_client) = create_tx (vif_id, backend_id) in
@@ -194,7 +198,7 @@ module Make(C: S.CONFIGURATION with type 'a io = 'a Lwt.t) = struct
             let _ : Io_page.t = pop_rx_page nf msg.RX.Response.id in
             ()
           );
-          printf "Netif: received error: %d" e
+          Log.debug (fun f -> f "Netif: received error: %d" e);
       | Ok frame ->
           let data = Cstruct.create frame.Recv.total_size in
           let next = ref 0 in
@@ -249,7 +253,7 @@ module Make(C: S.CONFIGURATION with type 'a io = 'a Lwt.t) = struct
         if Hashtbl.mem devices id' then
           return (`Ok (Hashtbl.find devices id'))
         else begin
-          printf "Netif.connect %d\n%!" id';
+          Log.debug (fun f -> f "Netif.connect %d" id);
           try_lwt
             lwt t = plug_inner id' in
             let l = Lwt_mutex.create () in
@@ -264,7 +268,7 @@ module Make(C: S.CONFIGURATION with type 'a io = 'a Lwt.t) = struct
       end
     | None ->
       C.enumerate () >>= fun all ->
-      printf "Netif.connect %s: could not find device\n" id;
+      Log.debug (fun f -> f "Netif.connect %s: could not find device" id);
       return (`Error (`Unknown
                         (Printf.sprintf "device %s not found (available = [ %s ])"
                            id (String.concat ", " all))))
@@ -272,7 +276,7 @@ module Make(C: S.CONFIGURATION with type 'a io = 'a Lwt.t) = struct
   (* Unplug shouldn't block, although the Xen one might need to due
      to Xenstore? XXX *)
   let disconnect t =
-    printf "Netif: disconnect\n%!";
+    Log.debug (fun f -> f "Netif: disconnect");
     (* TODO: free pages still in [t.rx_map] *)
     Shared_page_pool.shutdown t.t.tx_pool;
     Hashtbl.remove devices t.t.vif_id;
@@ -385,6 +389,6 @@ module Make(C: S.CONFIGURATION with type 'a io = 'a Lwt.t) = struct
   let reset_stats_counters t = Stats.reset t.t.stats
 
   let () =
-    printf "Netif: add resume hook\n%!";
+    Log.debug (fun f -> f "Netif: add resume hook");
     Sched.add_resume_hook resume
 end
