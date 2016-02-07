@@ -109,8 +109,9 @@ module Make(C: S.CONFIGURATION with type 'a io = 'a Lwt.t) = struct
     let backend_id = backend_conf.S.backend_id in
     Log.debug (fun f -> f "Netfront.create: id=%d domid=%d" vif_id backend_id);
     let features = backend_conf.S.features_available in
-    Features.(Printf.printf " sg:%b gso_tcpv4:%b rx_copy:%b rx_flip:%b smart_poll:%b\n"
-      features.sg features.gso_tcpv4 features.rx_copy features.rx_flip features.smart_poll);
+    Features.(Log.debug (fun f -> f " sg:%b gso_tcpv4:%b rx_copy:%b rx_flip:%b smart_poll:%b\n"
+      features.sg features.gso_tcpv4 features.rx_copy features.rx_flip
+      features.smart_poll));
     C.read_mac id >>= fun mac ->
     Log.debug (fun f -> f "MAC: %s" (Macaddr.to_string mac));
     (* Allocate a transmit and receive ring, and event channel *)
